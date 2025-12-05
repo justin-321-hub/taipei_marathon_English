@@ -212,7 +212,7 @@ async function sendText(text) {
         "Content-Type": "application/json",
         "X-Client-Id": clientId,
       },
-      body: JSON.stringify({ text: processedContent, clientId, language: "英文" }),
+      body: JSON.stringify({ text: processedContent, clientId, language: "英文",role: "user" }),
     });
 
     // 以文字讀回（避免直接 .json() 遇到空字串拋錯）
