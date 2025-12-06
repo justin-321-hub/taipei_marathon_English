@@ -157,7 +157,7 @@ async function sendText(text) {
       body: JSON.stringify({ 
         text: contentToSend, 
         clientId, 
-        language: "English", // <--- Changed to English
+        language: "英文", // <--- Changed to English
         role: "user"
       }),
     });
