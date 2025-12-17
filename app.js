@@ -1,27 +1,18 @@
 /**
- * app.js — Frontend Chat Logic (English Version)
- * ---------------------------------------------------------
- * Key Features:
- * 1) Basic message handling (User/Bot)
- * 2) No-login multi-user support via localStorage clientId
- * 3) Thinking animation control
- * 4) Backend API integration with English response request
- * 5) HTML rendering support for rich text responses
- * 6) Auto-retry mechanism for error code 200
- * 7) Auto-retry when response contains "Search Results" and "Html"
+ * app.js — Frontend JS Chat Logic (English Version)
  */
 
 "use strict";
 
 /* =========================
-   Backend API Configuration
-   ========================= */
+   Backend API Domain
+========================= */
 const API_BASE = "https://taipei-marathon-server.onrender.com";
 const api = (p) => `${API_BASE}${p}`;
 
 /* =========================
-   Client ID Management
-   ========================= */
+   No-login Multi-user: clientId
+========================= */
 const CID_KEY = "fourleaf_client_id";
 let clientId = localStorage.getItem(CID_KEY);
 if (!clientId) {
@@ -32,8 +23,8 @@ if (!clientId) {
 }
 
 /* =========================
-   DOM Elements
-   ========================= */
+   DOM References
+========================= */
 const elMessages = document.getElementById("messages");
 const elInput = document.getElementById("txtInput");
 const elBtnSend = document.getElementById("btnSend");
@@ -41,12 +32,12 @@ const elThinking = document.getElementById("thinking");
 
 /* =========================
    Message State
-   ========================= */
+========================= */
 const messages = [];
 
 /* =========================
    Utilities
-   ========================= */
+========================= */
 const uid = () => Math.random().toString(36).slice(2);
 
 function scrollToBottom() {
@@ -54,7 +45,7 @@ function scrollToBottom() {
 }
 
 /**
- * Toggle "Thinking" animation state
+ * Toggle "thinking" animation
  */
 function setThinking(on) {
   if (!elThinking) return;
@@ -71,21 +62,18 @@ function setThinking(on) {
 }
 
 /**
- * Smart Question Mark Handling
+ * Smart question mark processing (for user input)
  */
 function processQuestionMarks(text) {
   let result = text;
-  // Remove trailing question marks
   result = result.replace(/[?？]\s*$/g, '');
-  // Replace internal question marks with newlines
   result = result.replace(/[?？](?=.)/g, '\n');
-  // Clean up multiple newlines
   result = result.replace(/\n\s*\n/g, '\n');
   return result.trim();
 }
 
 /**
- * HTML Escape (for User Input Safety)
+ * HTML escaping (prevent XSS)
  */
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -94,43 +82,44 @@ function escapeHtml(text) {
 }
 
 /**
- * Check if response contains both "Search Results" and "Html"
+ * Check if response contains incomplete processing markers
  */
-function containsSearchResultsAndHtml(text) {
-  if (!text || typeof text !== 'string') return false;
+function containsIncompleteMarkers(text) {
+  if (typeof text !== 'string') return false;
   const lowerText = text.toLowerCase();
   return lowerText.includes('search results') && lowerText.includes('html');
 }
 
 /* =========================
-   Render Messages
-   ========================= */
+   Render messages to screen
+========================= */
 function render() {
   if (!elMessages) return;
   elMessages.innerHTML = "";
   for (const m of messages) {
     const isUser = m.role === "user";
+    // Row container
     const row = document.createElement("div");
     row.className = `msg ${isUser ? "user" : "bot"}`;
 
+    // Avatar
     const avatar = document.createElement("img");
     avatar.className = "avatar";
     avatar.src = isUser
       ? 'https://raw.githubusercontent.com/justin-321-hub/taipei_marathon/refs/heads/main/assets/user-avatar.png'
       : 'https://raw.githubusercontent.com/justin-321-hub/taipei_marathon/refs/heads/main/assets/logo.png';
-    avatar.alt = isUser ? "You" : "Bot";
+    avatar.alt = isUser ? "you" : "bot";
 
+    // Message bubble
     const bubble = document.createElement("div");
     bubble.className = "bubble";
-
     if (isUser) {
-      // User message: Escape HTML for security, convert newlines to <br>
       bubble.innerHTML = escapeHtml(m.text).replace(/\n/g, '<br>');
     } else {
-      // Bot message: Render HTML directly (Table, List, Link support)
       bubble.innerHTML = m.text;
     }
 
+    // Assembly
     row.appendChild(avatar);
     row.appendChild(bubble);
     elMessages.appendChild(row);
@@ -139,16 +128,27 @@ function render() {
 }
 
 /* =========================
-   Send Logic with Retry
-   ========================= */
-async function sendText(text, retryCount = 0) {
+   Call backend logic (independent error counters)
+========================= */
+async function sendText(text, retryCounts = {}) {
   const content = (text ?? elInput?.value ?? "").trim();
   if (!content) return;
 
   const contentToSend = processQuestionMarks(content);
 
-  // Only add user message on first attempt (not on retry)
-  if (retryCount === 0) {
+  // Initialize retry counters
+  if (!retryCounts.emptyResponse) retryCounts.emptyResponse = 0;
+  if (!retryCounts.incompleteMarkers) retryCounts.incompleteMarkers = 0;
+  if (!retryCounts.httpErrors) retryCounts.httpErrors = 0;
+
+  // Check if this is the first request
+  const isFirstRequest = 
+    retryCounts.emptyResponse === 0 && 
+    retryCounts.incompleteMarkers === 0 && 
+    retryCounts.httpErrors === 0;
+
+  // Only show user message and clear input on first call
+  if (isFirstRequest) {
     const userMsg = { id: uid(), role: "user", text: content, ts: Date.now() };
     messages.push(userMsg);
     if (elInput) elInput.value = "";
@@ -158,7 +158,6 @@ async function sendText(text, retryCount = 0) {
   setThinking(true);
 
   try {
-    // Send to backend
     const res = await fetch(api("/api/chat"), {
       method: "POST",
       headers: {
@@ -168,64 +167,119 @@ async function sendText(text, retryCount = 0) {
       body: JSON.stringify({
         text: contentToSend,
         clientId,
-        language: "英文",
+        language: "繁體中文",
         role: "user"
       }),
     });
 
     const raw = await res.text();
     let data;
+    
+    // Simplified JSON parsing, wrap as errorRaw on failure
     try {
       data = raw ? JSON.parse(raw) : {};
     } catch {
       data = { errorRaw: raw };
     }
 
-    // Check for error code 200 (specific error condition)
-    if (res.status === 200 && data && (data.error || data.errorRaw ||
-        (data.text === "" || data.text === null || data.text === undefined))) {
-      throw new Error("ERROR_CODE_200");
-    }
-
-    if (!res.ok) {
-      if (res.status === 502 || res.status === 404) {
-        throw new Error("Network unstable, please try again.");
+    // ★★★ 3. HTTP 500/502/503/504/401/404 Error Handling ★★★
+    const commonHttpErrors = [500, 502, 503, 504, 401, 404];
+    if (commonHttpErrors.includes(res.status)) {
+      if (retryCounts.httpErrors === 0) {
+        retryCounts.httpErrors++;
+        setThinking(false);
+        const retryMsg = {
+          id: uid(),
+          role: "assistant",
+          text: "Network is unstable, retrying your request.",
+          ts: Date.now(),
+        };
+        messages.push(retryMsg);
+        render();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return sendText(content, retryCounts);
+      } else {
+        throw new Error("Sorry, the network is unstable. Please try again later.");
       }
-      const serverMsg = (data && (data.error || data.body || data.message)) ?? raw ?? "unknown error";
-      throw new Error(`HTTP ${res.status} ${res.statusText} — ${serverMsg}`);
     }
 
-    // Process Bot Response
+    // ★★★ 4. Other HTTP Errors ★★★
+    if (!res.ok) {
+      throw new Error("Sorry, the network is unstable. Please try again later.");
+    }
+
+    // ★★★ 1. HTTP 200 Empty Response Error Handling ★★★
+    if (res.status === 200) {
+      let isEmptyResponse = false;
+      
+      if (typeof data === "object" && data !== null) {
+        const isPlainEmptyObject =
+          !Array.isArray(data) &&
+          Object.keys(data).filter(k => k !== 'clientId').length === 0;
+        
+        const hasTextField = 'text' in data || 'message' in data;
+        if (hasTextField) {
+          const textValue = data.text !== undefined ? data.text : data.message;
+          if (textValue === "" || textValue === null || textValue === undefined) {
+            isEmptyResponse = true;
+          }
+        } else if (isPlainEmptyObject) {
+          isEmptyResponse = true;
+        }
+      }
+
+      if (isEmptyResponse && retryCounts.emptyResponse === 0) {
+        retryCounts.emptyResponse++;
+        setThinking(false);
+        const retryMsg = {
+          id: uid(),
+          role: "assistant",
+          text: "Network is unstable, retrying your request.",
+          ts: Date.now(),
+        };
+        messages.push(retryMsg);
+        render();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return sendText(content, retryCounts);
+      }
+      
+      if (isEmptyResponse && retryCounts.emptyResponse >= 1) {
+        throw new Error("Sorry, the network is unstable. Please try again later.");
+      }
+    }
+
+    // Process reply text (HTML)
     let replyText;
     if (typeof data === "string") {
-      replyText = data.trim() || "Please rephrase your question.";
+      replyText = data.trim() || "Please rephrase your question, thank you.";
     } else if (data && typeof data === "object") {
       const hasTextField = 'text' in data || 'message' in data;
       if (hasTextField) {
         const textValue = data.text !== undefined ? data.text : data.message;
         if (textValue === "" || textValue === null || textValue === undefined) {
-          replyText = "Please rephrase your question.";
+          replyText = "Please rephrase your question, thank you.";
         } else {
-          replyText = String(textValue).trim() || "Please rephrase your question.";
+          replyText = String(textValue).trim() || "Please rephrase your question, thank you.";
         }
       } else {
         const isPlainEmptyObject =
           !Array.isArray(data) &&
           Object.keys(data).filter(k => k !== 'clientId').length === 0;
         if (isPlainEmptyObject) {
-          replyText = "Network error, please try again.";
+          replyText = "Network is unstable, please try again.";
         } else {
           replyText = JSON.stringify(data, null, 2);
         }
       }
     } else {
-      replyText = "Please rephrase your question.";
+      replyText = "Please rephrase your question, thank you.";
     }
 
-    // Check if response contains both "Search Results" and "Html"
-    if (containsSearchResultsAndHtml(replyText)) {
-      if (retryCount === 0) {
-        // First occurrence: Show thinking message and retry
+    // ★★★ 2. Backend Incomplete Processing Error ★★★
+    if (containsIncompleteMarkers(replyText)) {
+      if (retryCounts.incompleteMarkers === 0) {
+        retryCounts.incompleteMarkers++;
+        setThinking(false);
         const thinkingMsg = {
           id: uid(),
           role: "assistant",
@@ -234,15 +288,24 @@ async function sendText(text, retryCount = 0) {
         };
         messages.push(thinkingMsg);
         render();
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return sendText(content, retryCounts);
+      } else {
+        // Second failure, show error message and return
         setThinking(false);
-        // Retry with the same content
-        return sendText(content, retryCount + 1);
+        const errorMsg = {
+          id: uid(),
+          role: "assistant",
+          text: "Sorry, the network is unstable. Please try again later.",
+          ts: Date.now(),
+        };
+        messages.push(errorMsg);
+        render();
+        return;
       }
-      // Second occurrence: Continue to display the response anyway
     }
 
+    // Push bot message
     const botMsg = { id: uid(), role: "assistant", text: replyText, ts: Date.now() };
     messages.push(botMsg);
     setThinking(false);
@@ -250,39 +313,21 @@ async function sendText(text, retryCount = 0) {
 
   } catch (err) {
     setThinking(false);
-
-    // Handle ERROR_CODE_200 with retry logic
-    if (err.message === "ERROR_CODE_200") {
-      if (retryCount === 0) {
-        // First error: Show retry message and retry
-        const retryMsg = {
-          id: uid(),
-          role: "assistant",
-          text: "Network is unstable, retrying for you.",
-          ts: Date.now(),
-        };
-        messages.push(retryMsg);
-        render();
-        // Wait a moment before retrying
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // Retry with the same content
-        return sendText(content, retryCount + 1);
-      } else {
-        // Second error: Show final error message
-        const finalErrorMsg = {
-          id: uid(),
-          role: "assistant",
-          text: "Sorry, the network is currently unstable. Please try again later.",
-          ts: Date.now(),
-        };
-        messages.push(finalErrorMsg);
-        render();
-        return;
-      }
+    
+    // ★★★ 5. Offline Status Check ★★★
+    if (!navigator.onLine) {
+      const offlineMsg = {
+        id: uid(),
+        role: "assistant",
+        text: "You are currently offline. Please check your network connection and try again.",
+        ts: Date.now(),
+      };
+      messages.push(offlineMsg);
+      render();
+      return;
     }
-
-    // Handle other errors
-    const friendly = (!navigator.onLine && "You are currently offline. Please check your connection and try again.") || `${err?.message || err}`;
+    
+    const friendly = `${err?.message || err}`;
     const botErr = {
       id: uid(),
       role: "assistant",
@@ -294,9 +339,7 @@ async function sendText(text, retryCount = 0) {
   }
 }
 
-/* =========================
-   Event Listeners
-   ========================= */
+// Event bindings
 elBtnSend?.addEventListener("click", () => sendText());
 elInput?.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
@@ -307,13 +350,11 @@ elInput?.addEventListener("keydown", (e) => {
 
 window.addEventListener("load", () => elInput?.focus());
 
-/* =========================
-   Initial Welcome Message
-   ========================= */
+// Welcome message
 messages.push({
   id: uid(),
   role: "assistant",
-  text: "Welcome to the Taipei Marathon Smart Customer Service! I am your assistant. How can I help you today?",
+  text: "歡迎來到臺北馬拉松智慧客服！<br>我是小幫手，隨時為您解答~ 有什麼問題可以為您解答的嗎?",
   ts: Date.now(),
 });
 render();
