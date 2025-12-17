@@ -167,7 +167,7 @@ async function sendText(text, retryCounts = {}) {
       body: JSON.stringify({
         text: contentToSend,
         clientId,
-        language: "繁體中文",
+        language: "英文",
         role: "user"
       }),
     });
@@ -354,7 +354,7 @@ window.addEventListener("load", () => elInput?.focus());
 messages.push({
   id: uid(),
   role: "assistant",
-  text: "歡迎來到臺北馬拉松智慧客服！<br>我是小幫手，隨時為您解答~ 有什麼問題可以為您解答的嗎?",
+  text: "Welcome to Taipei Marathon Smart Customer Service!\nI'm your assistant, ready to help you anytime~ What can I help you with?",
   ts: Date.now(),
 });
 render();
