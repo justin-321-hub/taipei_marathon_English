@@ -122,6 +122,7 @@ function render() {
 
     const bubble = document.createElement("div");
     bubble.className = "bubble";
+
     if (isUser) {
       // User message: Escape HTML for security, convert newlines to <br>
       bubble.innerHTML = escapeHtml(m.text).replace(/\n/g, '<br>');
@@ -181,7 +182,7 @@ async function sendText(text, retryCount = 0) {
     }
 
     // Check for error code 200 (specific error condition)
-    if (res.status === 200 && data && (data.error || data.errorRaw || 
+    if (res.status === 200 && data && (data.error || data.errorRaw ||
         (data.text === "" || data.text === null || data.text === undefined))) {
       throw new Error("ERROR_CODE_200");
     }
@@ -233,10 +234,8 @@ async function sendText(text, retryCount = 0) {
         };
         messages.push(thinkingMsg);
         render();
-
         // Wait before retrying
         await new Promise(resolve => setTimeout(resolve, 2000));
-        
         setThinking(false);
         // Retry with the same content
         return sendText(content, retryCount + 1);
@@ -264,10 +263,8 @@ async function sendText(text, retryCount = 0) {
         };
         messages.push(retryMsg);
         render();
-
         // Wait a moment before retrying
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
         // Retry with the same content
         return sendText(content, retryCount + 1);
       } else {
@@ -316,7 +313,7 @@ window.addEventListener("load", () => elInput?.focus());
 messages.push({
   id: uid(),
   role: "assistant",
-  text: "Welcome to the Taipei Marathon Smart Customer Service!<br>I am your assistant. How can I help you today?",
+  text: "Welcome to the Taipei Marathon Smart Customer Service! I am your assistant. How can I help you today?",
   ts: Date.now(),
 });
 render();
