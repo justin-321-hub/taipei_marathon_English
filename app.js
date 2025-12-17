@@ -354,7 +354,7 @@ window.addEventListener("load", () => elInput?.focus());
 messages.push({
   id: uid(),
   role: "assistant",
-  text: "Welcome to Taipei Marathon Smart Customer Service! \n I'm your assistant, ready to help you anytime~ What can I help you with?",
+  text: "Welcome to Taipei Marathon Smart Customer Service!<br>I'm your assistant, ready to help you anytime~<br>What can I help you with?",
   ts: Date.now(),
 });
 render();
