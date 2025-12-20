@@ -167,7 +167,7 @@ async function sendText(text, retryCounts = {}) {
       body: JSON.stringify({
         text: contentToSend,
         clientId,
-        language: "英文",
+        language: "繁體中文",
         role: "user"
       }),
     });
@@ -349,6 +349,7 @@ elInput?.addEventListener("keydown", (e) => {
 });
 
 window.addEventListener("load", () => elInput?.focus());
+
 
 // Welcome message
 messages.push({
